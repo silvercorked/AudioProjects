@@ -1,0 +1,13 @@
+{
+  "musicLibrary": {
+	"recusiveFolders": [
+	  // full path as string to folder containing sound/music files and more folders containing sound/music files
+	],
+	"folders": [
+	  // full path as string to folder containing sound/music files
+	],
+	"individualFiles": [
+	  // full path to sound/music file
+	]
+  }
+}
