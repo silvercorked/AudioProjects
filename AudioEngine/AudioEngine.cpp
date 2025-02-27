@@ -114,4 +114,15 @@ namespace Audio {
 		foundIter->second->isPlaying(&playing);
 		return playing;
 	}
+	auto AudioEngine::getPlayingSound(i32 channelId) const -> std::optional<SoundInfo> {
+		auto foundIter = impl->channels.find(channelId);
+		if (foundIter != impl->channels.end()) {
+			FMOD::Sound* sound;
+			foundIter->second->getCurrentSound(&sound);
+			if (sound) {
+				return std::optional<SoundInfo>(std::in_place, sound, foundIter->second);
+			}
+		}
+		 return std::optional<SoundInfo>{};
+	}
 };

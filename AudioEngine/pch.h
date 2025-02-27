@@ -16,6 +16,10 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <chrono>
+#include <memory>
+#include <optional>
+#include <unordered_map>
 #include <cassert>
 #include <cmath>
 #include <cstdint>

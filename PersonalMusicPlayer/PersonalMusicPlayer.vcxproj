@@ -143,14 +143,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include="config.json" />
     <None Include="config.json.example" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Input.cpp" />
+    <ClInclude Include="API.hpp" />
+    <ClInclude Include="Input.hpp" />
+    <ClInclude Include="LoadedSong.hpp" />
+    <ClCompile Include="main.cpp" />
     <ClInclude Include="Song.hpp" />
+    <ClInclude Include="TerminalUtils.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

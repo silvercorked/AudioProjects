@@ -4,7 +4,10 @@
 
 #include "Vec.hpp"
 
+#include "SoundInfo.hpp"
+
 #include <string>
+#include <optional>
 
 #ifdef AUDIOENGINE_EXPORTS
 #define AUDIOENGINE_API __declspec(dllexport)
@@ -15,6 +18,11 @@
 // based on https://www.youtube.com/watch?v=Vjm--AqG04Y
 // debated whether to maintain the pointer-to-implementation style design presented in the talk.
 // I think i will because a different implementation, need only supply the needed functions of AudioEngine
+
+// i now see why the pointer to implementation was done. The DLL interface barrier is interesting.
+// if i define a bunch of STL types as exported class members, then sizes and implementations might change
+// so instead, i can just export a class with a bunch of public accessing functions that interact
+// with a un-exported implementation. kinda clever
 
 namespace Audio {
 	class AUDIOENGINE_API AudioEngine {
@@ -33,6 +41,7 @@ namespace Audio {
 		auto setChannel3dPosition(i32 channelId, const Vec3<f32>& pos) -> void;
 		auto setChannelVolume(i32 channelId, f32 volumedB) -> void;
 		auto isPlaying(i32 channelId) const -> bool;
+		auto getPlayingSound(i32 channelId) const -> std::optional<SoundInfo>;
 	};
 };
 

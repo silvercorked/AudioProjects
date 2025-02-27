@@ -1,3 +1,4 @@
+
 #include "PrimitiveTypes.hpp"
 
 #include <iostream>
@@ -10,9 +11,12 @@
 
 #include "AudioEngine.hpp"
 
+#include "API.hpp"
 #include "Song.hpp"
+#include "LoadedSong.hpp"
+#include "Input.hpp"
 
-using json = nlohmann::json;
+#include "TerminalUtils.hpp"
 
 auto main() -> int {
 	const auto locale = "en_US.UTF-8";
@@ -20,111 +24,127 @@ auto main() -> int {
 	std::locale::global(std::locale(locale)); // need locales for dealing with string conversions (maybe)
 
 	Audio::AudioEngine::init();
-
+	
 	Audio::AudioEngine engine{};
 
-	std::ifstream f("config.json");
-	json config = json::parse(f);
+	Input::getInstance().registerKeyToAction('N', KeyActions::nextSong);
+	Input::getInstance().registerKeyToAction('B', KeyActions::prevSong);
+	Input::getInstance().registerKeyToAction('P', KeyActions::togglePaused);
+	Input::getInstance().registerKeyToAction('S', KeyActions::shuffleSongs);
+	Input::getInstance().registerKeyToAction('Q', KeyActions::quitApplication);
 
-	std::vector<std::string> folders = config["musicLibrary"]["folders"];
-	std::vector<std::string> recusiveFolders = config["musicLibrary"]["recusiveFolders"];
-	std::vector<std::string> individualSongs = config["musicLibrary"]["individualFiles"];
+	auto songs = PersonalMusicPlayer::loadEntireLibrary(engine);
+	std::cout << "\n\n";
+	LoadedSong playingSong;
 
-	std::vector<Song> loadedSongs;
+	PersonalMusicPlayer::shuffleSongs(songs);
 
-	i32 failedToLoad = 0, alreadyLoaded = 0, loaded = 0;
-	auto loadSongFromPath = [&engine, &failedToLoad, &alreadyLoaded, &loaded](const std::filesystem::path& path, std::vector<Song>& loadedSongs) {
-		std::string pathAsString = path.string();
-		Song& curr = loadedSongs.emplace_back(pathAsString, path.stem().string());
-		i8 statusCode = engine.loadSound(curr.path, curr.name);
-		switch (statusCode) {
-			case -1: 
-				std::cerr << std::format(
-					"Failed to load song: {}, with path {}\n",
-					curr.name,
-					curr.path.substr(0, curr.path.size() - curr.name.size())
-				);
-				failedToLoad++;
-				loadedSongs.pop_back();
-				break;
-			case 0:
-				std::cerr << std::format(
-					"Possible duplicate song detected while loading: {}, with path {}. Aborting load.\n",
-					curr.name,
-					curr.path.substr(0, curr.path.size() - curr.name.size())
-				);
-				alreadyLoaded++;
-				loadedSongs.pop_back();
-				break;
-			case 1:
-				loaded++;
-				break;
-		}
-	};
+	i32 currentSongIndex = 0;
+	bool quit = false;
 
-	auto validExtension = [](const std::filesystem::path& path) -> bool {
-		constexpr static auto validFormats = std::array{
-			".aif", ".aiff",
-			".asf", ".wma", ".wmv",
-			".dls",
-			".flac",
-			".fsb",
-			".it",
-			".mid",
-			".mod",
-			".mp2", ".mp3",
-			".ogg",
-			".asx", ".pls", ".m3u", ".wax",
-			".raw",
-			".s3m",
-			".wav",
-			".xm",
-			".mp4", ".m4a"
-		};
-		auto extension = path.extension().string();
-		//return std::ranges::contains(validFormats, extension); // :( no c++23 yet
-		return std::ranges::any_of(validFormats, [&extension](const std::string& str) { return str == extension; });
-	};
+	i32 channelId = engine.playSound(songs[currentSongIndex].name);
+	playingSong = LoadedSong(songs[currentSongIndex], channelId);
 
-	i32 wrongFileExtension = 0;
-	for (const auto& folder : folders) {
-		for (const auto& file : std::filesystem::directory_iterator(folder)) {
-			const auto path = file.path().string();
-			if (validExtension(path))
-				loadSongFromPath(path, loadedSongs);
-			else
-				wrongFileExtension++;
-		}
-	}
-	for (const auto& folder : recusiveFolders) {
-		for (const auto& file : std::filesystem::recursive_directory_iterator(folder)) {
-			const auto path = file.path().string();
-			if (validExtension(path))
-				loadSongFromPath(path, loadedSongs);
-			else
-				wrongFileExtension++;
-		}
-	}
-	for (const std::string& filePath : individualSongs) {
-		const auto path = std::filesystem::path(filePath);
-		if (validExtension(path))
-			loadSongFromPath(path, loadedSongs);
-		else
-			wrongFileExtension++;
-	}
-	
-	std::cout << std::format(
-		"Songs loaded: {}, duplicates: {}, failed loads: {}, invalid file extension: {}, library size: {}\n",
-		loaded, alreadyLoaded, failedToLoad, wrongFileExtension, loadedSongs.size()
+	std::mutex audioMutex;
+
+	Input::getInstance().subscribeToKeypress(
+		[&engine, &currentSongIndex, &songs, &playingSong, &audioMutex]() -> void {
+			std::lock_guard<std::mutex> lock(audioMutex);
+			currentSongIndex++;
+			if (currentSongIndex >= songs.size())
+				currentSongIndex = 0;
+			if (engine.isPlaying(playingSong.channelId))
+				engine.stopChannel(playingSong.channelId);
+			i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+			playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
+		}, KeyActions::nextSong
+	);
+	Input::getInstance().subscribeToKeypress(
+		[&quit]() -> void {
+			quit = true;
+		}, KeyActions::quitApplication
+	);
+	Input::getInstance().subscribeToKeypress(
+		[&engine, &currentSongIndex, &songs, &playingSong, &audioMutex]() -> void {
+			std::lock_guard<std::mutex> lock(audioMutex);
+			PersonalMusicPlayer::shuffleSongs(songs);
+			if (engine.isPlaying(playingSong.channelId))
+				engine.stopChannel(playingSong.channelId);
+			i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+			playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
+		}, KeyActions::shuffleSongs
 	);
 	
+	i32 linesUsed = PersonalMusicPlayer::printPlayingSongInfo(engine, channelId);
+	auto lastTimePoint = std::chrono::steady_clock::now();
+	auto currTimePoint = lastTimePoint;
+	
+	while (!quit) {
+		// print music menu for song selection
+		while (engine.isPlaying(playingSong.channelId)) {
+			engine.update();
 
-	i32 channelId = engine.playSound(loadedSongs[0].name);
-	//R"(H:\projects\js\ytPlaylistDownloader\out\Answer to Extreme TOGENASHI TOGEARI - Topic.mp3)"
-
-	while (engine.isPlaying(channelId)) {
-		engine.update();
+			currTimePoint = std::chrono::steady_clock::now();
+			if (std::chrono::duration_cast<std::chrono::seconds>(currTimePoint - lastTimePoint).count() >= 1) {
+				eraseLines(linesUsed);
+				{
+					std::lock_guard<std::mutex> lock(audioMutex);
+					linesUsed = PersonalMusicPlayer::printPlayingSongInfo(engine, playingSong.channelId);
+				}
+				lastTimePoint = currTimePoint;
+			}
+			if (!quit && !engine.isPlaying(playingSong.channelId)) { // song ended naturally
+				std::lock_guard<std::mutex> lock(audioMutex);
+				currentSongIndex++;
+				if (currentSongIndex >= songs.size())
+					currentSongIndex = 0;
+				if (engine.isPlaying(playingSong.channelId))
+					engine.stopChannel(playingSong.channelId);
+				i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+				playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
+			}
+			if (quit) {
+				std::lock_guard<std::mutex> lock(audioMutex);
+				engine.stopAllChannels();
+				break;
+			}
+		}
 	}
+
+	/*
+	if (keyboardActions.nextSong) {
+		currentSongIndex++;
+		if (currentSongIndex >= songs.size())
+			currentSongIndex = 0;
+		if (engine.isPlaying(channelId))
+			engine.stopChannel(channelId);
+		i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+	}
+	else if (keyboardActions.prevSong) {
+		currentSongIndex--;
+		if (currentSongIndex < 0)
+			currentSongIndex = songs.size() - 1;
+		if (engine.isPlaying(channelId))
+			engine.stopChannel(channelId);
+		engine.playSound(songs[currentSongIndex].name);
+	}
+	if (keyboardActions.togglePaused) {
+		if (engine.isPlaying(channelId))
+			engine.stopChannel(channelId);
+		else
+			engine.playSound(songs[currentSongIndex].name); // not sure how to restart after pause yet. this is a guess
+	}
+	if (keyboardActions.shuffleSongs) {
+		bool wasPlaying = engine.isPlaying(channelId);
+		if (wasPlaying)
+			engine.stopChannel(channelId);
+		shuffleSongs(songs); // current song can stay the same
+		if (wasPlaying)
+			engine.playSound(songs[currentSongIndex].name);
+	}
+	*/
+
+	Input::getInstance().shutdownInput();
 
 	std::cout << " sound over" << std::endl;
 
