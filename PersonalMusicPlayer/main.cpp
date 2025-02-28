@@ -55,9 +55,21 @@ auto main() -> int {
 				currentSongIndex = 0;
 			if (engine.isPlaying(playingSong.channelId))
 				engine.stopChannel(playingSong.channelId);
-			i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
-			playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
+			i32 newChannelId = engine.playSound(songs[currentSongIndex].name);
+			playingSong = LoadedSong(songs[currentSongIndex], newChannelId);
 		}, KeyActions::nextSong
+	);
+	Input::getInstance().subscribeToKeypress(
+		[&engine, &currentSongIndex, &songs, &playingSong, &audioMutex]() -> void {
+			std::lock_guard<std::mutex> lock(audioMutex);
+			currentSongIndex--;
+			if (currentSongIndex < 0)
+				currentSongIndex = songs.size() - 1;
+			if (engine.isPlaying(playingSong.channelId))
+				engine.stopChannel(playingSong.channelId);
+			i32 newChannelId = engine.playSound(songs[currentSongIndex].name);
+			playingSong = LoadedSong(songs[currentSongIndex], newChannelId);
+		}, KeyActions::prevSong
 	);
 	Input::getInstance().subscribeToKeypress(
 		[&quit]() -> void {
@@ -74,8 +86,9 @@ auto main() -> int {
 			playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
 		}, KeyActions::shuffleSongs
 	);
-	
-	i32 linesUsed = PersonalMusicPlayer::printPlayingSongInfo(engine, channelId);
+
+	i32 linesUsed = PersonalMusicPlayer::printLibraryPositionInfo(songs, currentSongIndex);
+	linesUsed += PersonalMusicPlayer::printPlayingSongInfo(engine, channelId);
 	auto lastTimePoint = std::chrono::steady_clock::now();
 	auto currTimePoint = lastTimePoint;
 	
@@ -89,24 +102,26 @@ auto main() -> int {
 				eraseLines(linesUsed);
 				{
 					std::lock_guard<std::mutex> lock(audioMutex);
-					linesUsed = PersonalMusicPlayer::printPlayingSongInfo(engine, playingSong.channelId);
+					linesUsed = PersonalMusicPlayer::printLibraryPositionInfo(songs, currentSongIndex);
+					linesUsed += PersonalMusicPlayer::printPlayingSongInfo(engine, playingSong.channelId);
 				}
 				lastTimePoint = currTimePoint;
 			}
-			if (!quit && !engine.isPlaying(playingSong.channelId)) { // song ended naturally
+			{ // before trying cases, wait mutex (allows full nextSong/prevSong behavior before checking engine.isPlaying)
 				std::lock_guard<std::mutex> lock(audioMutex);
-				currentSongIndex++;
-				if (currentSongIndex >= songs.size())
-					currentSongIndex = 0;
-				if (engine.isPlaying(playingSong.channelId))
-					engine.stopChannel(playingSong.channelId);
-				i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
-				playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
-			}
-			if (quit) {
-				std::lock_guard<std::mutex> lock(audioMutex);
-				engine.stopAllChannels();
-				break;
+				if (!quit && !engine.isPlaying(playingSong.channelId)) { // song ended naturally
+					currentSongIndex++;
+					if (currentSongIndex >= songs.size())
+						currentSongIndex = 0;
+					if (engine.isPlaying(playingSong.channelId))
+						engine.stopChannel(playingSong.channelId);
+					i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+					playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
+				}
+				if (quit) {
+					engine.stopAllChannels();
+					break;
+				}
 			}
 		}
 	}

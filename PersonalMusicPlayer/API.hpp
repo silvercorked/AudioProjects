@@ -189,4 +189,9 @@ namespace PersonalMusicPlayer {
 			return 1;
 		}
 	}
+
+	auto printLibraryPositionInfo(const std::vector<Song>& library, i32 currentSongIndex) -> int {
+		std::cout << std::format("Song {}\\{}\n", currentSongIndex + 1, library.size());
+		return 1;
+	}
 };
