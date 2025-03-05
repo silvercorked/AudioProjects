@@ -27,13 +27,16 @@ auto main() -> int {
 	
 	Audio::AudioEngine engine{};
 
-	Input::getInstance().registerKeyToAction('N', KeyActions::nextSong);
-	Input::getInstance().registerKeyToAction('B', KeyActions::prevSong);
-	Input::getInstance().registerKeyToAction('P', KeyActions::togglePaused);
-	Input::getInstance().registerKeyToAction('S', KeyActions::shuffleSongs);
-	Input::getInstance().registerKeyToAction('Q', KeyActions::quitApplication);
+	auto& input = Input::getInstance();
+	input.registerKeyToAction('N', KeyActions::nextSong);
+	input.registerKeyToAction('B', KeyActions::prevSong);
+	input.registerKeyToAction('P', KeyActions::togglePaused);
+	input.registerKeyToAction('S', KeyActions::shuffleSongs);
+	input.registerKeyToAction('Q', KeyActions::quitApplication);
 
-	auto songs = PersonalMusicPlayer::loadEntireLibrary(engine);
+	//auto songs = PersonalMusicPlayer::loadEntireLibrary(engine);
+	// avoid preload
+	auto songs = PersonalMusicPlayer::getSongsFromConfigFile();
 	std::cout << "\n\n";
 	LoadedSong playingSong;
 
@@ -42,47 +45,50 @@ auto main() -> int {
 	i32 currentSongIndex = 0;
 	bool quit = false;
 
-	i32 channelId = engine.playSound(songs[currentSongIndex].name);
+	i32 channelId = engine.loadAndPlaySound(songs[currentSongIndex].path, songs[currentSongIndex].name);
 	playingSong = LoadedSong(songs[currentSongIndex], channelId);
 
 	std::mutex audioMutex;
 
-	Input::getInstance().subscribeToKeypress(
+	input.subscribeToKeypress(
 		[&engine, &currentSongIndex, &songs, &playingSong, &audioMutex]() -> void {
 			std::lock_guard<std::mutex> lock(audioMutex);
+			if (engine.isPlaying(playingSong.channelId))
+				engine.stopChannel(playingSong.channelId);
+			engine.unloadSound(playingSong.song.name);
 			currentSongIndex++;
 			if (currentSongIndex >= songs.size())
 				currentSongIndex = 0;
-			if (engine.isPlaying(playingSong.channelId))
-				engine.stopChannel(playingSong.channelId);
-			i32 newChannelId = engine.playSound(songs[currentSongIndex].name);
+			i32 newChannelId = engine.loadAndPlaySound(songs[currentSongIndex].path, songs[currentSongIndex].name);
 			playingSong = LoadedSong(songs[currentSongIndex], newChannelId);
 		}, KeyActions::nextSong
 	);
-	Input::getInstance().subscribeToKeypress(
+	input.subscribeToKeypress(
 		[&engine, &currentSongIndex, &songs, &playingSong, &audioMutex]() -> void {
 			std::lock_guard<std::mutex> lock(audioMutex);
+			if (engine.isPlaying(playingSong.channelId))
+				engine.stopChannel(playingSong.channelId);
+			engine.unloadSound(playingSong.song.name);
 			currentSongIndex--;
 			if (currentSongIndex < 0)
 				currentSongIndex = songs.size() - 1;
-			if (engine.isPlaying(playingSong.channelId))
-				engine.stopChannel(playingSong.channelId);
-			i32 newChannelId = engine.playSound(songs[currentSongIndex].name);
+			i32 newChannelId = engine.loadAndPlaySound(songs[currentSongIndex].path, songs[currentSongIndex].name);
 			playingSong = LoadedSong(songs[currentSongIndex], newChannelId);
 		}, KeyActions::prevSong
 	);
-	Input::getInstance().subscribeToKeypress(
+	input.subscribeToKeypress(
 		[&quit]() -> void {
 			quit = true;
 		}, KeyActions::quitApplication
 	);
-	Input::getInstance().subscribeToKeypress(
+	input.subscribeToKeypress(
 		[&engine, &currentSongIndex, &songs, &playingSong, &audioMutex]() -> void {
 			std::lock_guard<std::mutex> lock(audioMutex);
 			PersonalMusicPlayer::shuffleSongs(songs);
 			if (engine.isPlaying(playingSong.channelId))
 				engine.stopChannel(playingSong.channelId);
-			i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+			engine.unloadSound(playingSong.song.name);
+			i32 newChannelid = engine.loadAndPlaySound(songs[currentSongIndex].path, songs[currentSongIndex].name);
 			playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
 		}, KeyActions::shuffleSongs
 	);
@@ -110,16 +116,18 @@ auto main() -> int {
 			{ // before trying cases, wait mutex (allows full nextSong/prevSong behavior before checking engine.isPlaying)
 				std::lock_guard<std::mutex> lock(audioMutex);
 				if (!quit && !engine.isPlaying(playingSong.channelId)) { // song ended naturally
+					if (engine.isPlaying(playingSong.channelId))
+						engine.stopChannel(playingSong.channelId);
+					engine.unloadSound(playingSong.song.name);
 					currentSongIndex++;
 					if (currentSongIndex >= songs.size())
 						currentSongIndex = 0;
-					if (engine.isPlaying(playingSong.channelId))
-						engine.stopChannel(playingSong.channelId);
-					i32 newChannelid = engine.playSound(songs[currentSongIndex].name);
+					i32 newChannelid = engine.loadAndPlaySound(songs[currentSongIndex].path, songs[currentSongIndex].name);
 					playingSong = LoadedSong(songs[currentSongIndex], newChannelid);
 				}
 				if (quit) {
 					engine.stopAllChannels();
+					engine.unloadSound(playingSong.song.name);
 					break;
 				}
 			}

@@ -148,7 +148,7 @@ namespace PersonalMusicPlayer {
 		auto songs = getSongsFromConfigFile();
 
 		u32 loaded = 0, alreadyLoaded = 0, failedToLoad = 0;
-
+		
 		for (auto i = 0; i < songs.size(); i++) {
 			if (loadSongFromPath(engine, songs[i], &loaded, &alreadyLoaded, &failedToLoad) <= 0) {
 				songs.erase(songs.begin() + i); // on fail to load (invalid for whatever reason)

@@ -36,6 +36,7 @@ namespace Audio {
 		auto unloadSound(const std::string& soundName) -> void;
 		auto set3dListenerAndOrientation(const Vec3<f32>& pos, const Vec3<f32>& look, const Vec3<f32>& up) -> void;
 		auto playSound(const std::string& soundName, const Vec3<f32>& pos = Vec3<f32>{ 0, 0, 0 }, f32 volumedB = 0) -> i32;
+		auto loadAndPlaySound(const std::string& path, const std::string& soundName, const Vec3<f32>& pos = Vec3<f32>{ 0, 0, 0 }, f32 volumedB = 0) -> i32;
 		auto stopChannel(i32 channelId) -> void;
 		auto stopAllChannels() -> void;
 		auto setChannel3dPosition(i32 channelId, const Vec3<f32>& pos) -> void;

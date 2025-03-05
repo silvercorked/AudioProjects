@@ -81,6 +81,28 @@ namespace Audio {
 		return channelId;
 	}
 
+	auto AudioEngine::loadAndPlaySound(const std::string& path, const std::string& soundName, const Vec3<f32>& pos, f32 volumedB) -> i32 {
+		i32 channelId = impl->nextChannelId++;
+		if (this->loadSound(path, soundName) < 0) {
+			return channelId; // failed to load
+		}
+		auto foundIter = impl->sounds.find(soundName);
+		if (foundIter == impl->sounds.end()) {
+			return channelId; // error case. shouldn't happen unless multiple threads involved
+		}
+		
+		FMOD::Channel* channel = nullptr;
+		impl->system->playSound(foundIter->second, impl->channelGroup, true, &channel);
+		if (channel) { // don't want to play sound automatically because still need to set some values on the channel
+			FMOD_VECTOR position = Vec3ToFMODVec(pos);
+			channel->set3DAttributes(&position, nullptr);
+			channel->setVolume(dBToVolume(volumedB));
+			channel->setPaused(false);
+			impl->channels[channelId] = channel;
+		}
+		return channelId;
+	}
+
 	auto AudioEngine::stopChannel(i32 channelId) -> void {
 		auto foundIter = impl->channels.find(channelId);
 		if (foundIter == impl->channels.end()) return;
